@@ -1,0 +1,52 @@
+import RPi.GPIO as GPIO
+import time
+
+# GPIO pin connected to the pulse sensor
+PULSE_SENSOR_PIN = 17
+# GPIO pin for monitoring signal loss
+SIGNAL_LOSS_PIN = 26
+
+GPIO.setmode(GPIO.BCM)
+GPIO.setup(PULSE_SENSOR_PIN, GPIO.IN)
+GPIO.setup(SIGNAL_LOSS_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+
+# Variables for pulse rate calculation
+pulse_sample_count = 10
+pulse_samples = [0] * pulse_sample_count
+last_beat_time = time.time()
+total_pulse_time = 0
+average_pulse_rate = 0
+
+def interrupt_callback(channel):
+    global last_beat_time, total_pulse_time, average_pulse_rate
+
+    beat_time = time.time()
+    pulse_duration = beat_time - last_beat_time
+    last_beat_time = beat_time
+
+    if pulse_duration < 0.2:  # Ignore invalid readings
+        return
+
+    # Calculate heart rate (beats per minute)
+    pulse_rate = 60.0 / pulse_duration
+    pulse_samples.append(pulse_rate)
+    pulse_samples.pop(0)
+
+    total_pulse_time += pulse_duration
+    average_pulse_rate = len(pulse_samples) / total_pulse_time * 60
+
+    print("Heart rate: {:.2f} BPM".format(average_pulse_rate))
+
+def signal_loss_callback(channel):
+    if not GPIO.input(SIGNAL_LOSS_PIN):
+        print("Signal loss detected on GPIO pin 26!")
+
+try:
+    GPIO.add_event_detect(PULSE_SENSOR_PIN, GPIO.FALLING, callback=interrupt_callback)
+    GPIO.add_event_detect(SIGNAL_LOSS_PIN, GPIO.BOTH, callback=signal_loss_callback)
+
+    while True:
+        time.sleep(1)
+
+except KeyboardInterrupt:
+    GPIO.cleanup()
